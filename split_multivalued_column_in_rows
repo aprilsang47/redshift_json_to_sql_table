@@ -1,0 +1,58 @@
+# Split multi-valued columns in rows from JSON-converted tables
+# Functions used: 
+# regexp_replace();
+# trim();
+# regexp_count();
+# SPLIT_PART();
+
+CREATE TABLE customer_info (
+    id SERIAL PRIMARY KEY,
+    customer_id VARCHAR(100) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    order_id SUPER NOT NULL
+);
+
+INSERT INTO customer_info (customer_id, name, order_id) 
+VALUES
+    ('aaa', 'Doe', '1001;1002;1003'),
+    ('bbb', 'Smith', '2001;2002;2003'),
+    ('ccc', 'Johnson', '3001;3002;3003');
+
+with sequence as (
+  select 1 as seq union all select 2 union all select 3 union all select 4 union all select 5 union all select 6 union all select 7 union all select 8 union all select 9 union all
+  select 10 
+  ),
+
+order_id_split_stagging AS
+             (
+                 select *,
+                        regexp_count(order_id, ';')         as order_id_length
+                 from (
+                          select id,
+                                 customer_id,
+                                 regexp_replace(trim(name),'[^0-9]+',';') as  cleansed_name, # Using regexp_replace() to clean the special sign in Customer Name.
+                                 order_id
+                  from customer_info
+                  where 1 = 1
+                      )
+             ),
+
+# Getting the splitter sequences by the max part count in order_id.
+splitter AS
+             (
+                 SELECT *
+                 FROM sequence
+                 WHERE seq BETWEEN 1 AND (SELECT max(regexp_count(trim(LEADING ';' FROM order_id), ';') + 1)
+                                          FROM order_id_split_stagging)
+             ),
+
+# Splitting a string literal into parts using the ; delimiter and returns each part in rows.
+    select id,
+           customer_id,
+           cleansed_name,
+           order_id
+           SPLIT_PART(order_id, ';', seq) AS order_id_split
+    from order_id_split_stagging
+         join splitter on 1 = 1
+    where seq <= order_id_length
+    
